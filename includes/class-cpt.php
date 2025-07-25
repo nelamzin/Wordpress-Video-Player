@@ -77,31 +77,15 @@ class Secure_Video_Player_CPT {
 			'exclude_from_search'   => true,
 			'publicly_queryable'    => false,
 			'capability_type'       => 'post',
-			'capabilities'          => array(
-				'edit_post'          => 'manage_secure_videos',
-				'read_post'          => 'manage_secure_videos',
-				'delete_post'        => 'manage_secure_videos',
-				'edit_posts'         => 'manage_secure_videos',
-				'edit_others_posts'  => 'manage_secure_videos',
-				'delete_posts'       => 'manage_secure_videos',
-				'publish_posts'      => 'manage_secure_videos',
-				'read_private_posts' => 'manage_secure_videos',
-			),
 			'show_in_rest'          => true,
 			'rest_base'             => 'secure-videos',
 		);
 
-		register_post_type( 'video_player', $args );
-
-		// Map capabilities to edit_posts for default behavior
-		$role = get_role( 'administrator' );
-		if ( $role ) {
-			$role->add_cap( 'manage_secure_videos' );
-		}
-
-		$role = get_role( 'editor' );
-		if ( $role ) {
-			$role->add_cap( 'manage_secure_videos' );
+		$result = register_post_type( 'video_player', $args );
+		
+		// Add error handling for CPT registration
+		if ( is_wp_error( $result ) ) {
+			error_log( 'Secure Video Player: Failed to register post type - ' . $result->get_error_message() );
 		}
 	}
 
