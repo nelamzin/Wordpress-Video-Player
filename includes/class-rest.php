@@ -66,16 +66,25 @@ class Secure_Video_Player_REST {
 		// Verify nonce
 		$nonce = $request->get_param( 'nonce' );
 		
-		// Log nonce verification for debugging (remove in production)
+		// Log nonce verification for debugging
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 			error_log( 'SVP: Nonce verification - Received: ' . $nonce );
+			error_log( 'SVP: Expected nonce action: svp_video_nonce' );
+			error_log( 'SVP: Current user ID: ' . get_current_user_id() );
 		}
 		
 		if ( ! $nonce ) {
 			return new WP_Error( 'missing_nonce', __( 'Missing nonce parameter.', 'secure-video-player' ), array( 'status' => 400 ) );
 		}
 		
-		if ( ! wp_verify_nonce( $nonce, 'svp_video_nonce' ) ) {
+		// Verify nonce with more flexible approach
+		$nonce_valid = wp_verify_nonce( $nonce, 'svp_video_nonce' );
+		if ( ! $nonce_valid ) {
+			// Log the failure for debugging
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'SVP: Nonce verification failed. Nonce: ' . $nonce );
+			}
+			
 			return new WP_Error( 'invalid_nonce', __( 'Invalid nonce. Please refresh the page and try again.', 'secure-video-player' ), array( 'status' => 403 ) );
 		}
 

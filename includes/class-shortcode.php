@@ -111,8 +111,9 @@ class Secure_Video_Player_Shortcode {
 					'secure-video-player',
 					'svpAjax',
 					array(
-						'apiUrl'    => esc_url_raw( rest_url( 'secure-video/v1/token' ) ),
+						'apiUrl'    => rest_url( 'secure-video/v1/token' ),
 						'nonce'     => wp_create_nonce( 'svp_video_nonce' ),
+						'homeUrl'   => home_url(),
 						'strings'   => array(
 							'loading'         => __( 'Loading...', 'secure-video-player' ),
 							'error'           => __( 'Error loading video', 'secure-video-player' ),
