@@ -19,7 +19,10 @@ class Secure_Video_Player_CPT {
 	 * Initialize the CPT
 	 */
 	public function init(): void {
-		add_action( 'init', array( $this, 'register_post_type' ) );
+		// Register the post type directly since we're already in the init hook
+		$this->register_post_type();
+		
+		// Set up other hooks
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_boxes' ) );
 		add_action( 'save_post', array( $this, 'save_meta_boxes' ) );
 		add_action( 'edit_form_after_title', array( $this, 'add_shortcode_display' ) );
