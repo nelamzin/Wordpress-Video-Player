@@ -21,6 +21,11 @@ class Secure_Video_Player_Assets {
 	public function init(): void {
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
+		add_action( 'svp_force_asset_localization', array( $this, 'force_localize_script' ) );
+		
+		// Add AJAX endpoint for nonce refresh
+		add_action( 'wp_ajax_svp_refresh_nonce', array( $this, 'ajax_refresh_nonce' ) );
+		add_action( 'wp_ajax_nopriv_svp_refresh_nonce', array( $this, 'ajax_refresh_nonce' ) );
 	}
 
 	/**
@@ -46,29 +51,51 @@ class Secure_Video_Player_Assets {
 			);
 
 			// Localize script with API endpoint and nonce
-			wp_localize_script(
-				'secure-video-player',
-				'svpAjax',
-				array(
-					'apiUrl'    => rest_url( 'secure-video/v1/token' ),
-					'nonce'     => wp_create_nonce( 'svp_video_nonce' ),
-					'homeUrl'   => home_url(),
-					'strings'   => array(
-						'loading'         => __( 'Loading...', 'secure-video-player' ),
-						'error'           => __( 'Error loading video', 'secure-video-player' ),
-						'play'            => __( 'Play', 'secure-video-player' ),
-						'pause'           => __( 'Pause', 'secure-video-player' ),
-						'mute'            => __( 'Mute', 'secure-video-player' ),
-						'unmute'          => __( 'Unmute', 'secure-video-player' ),
-						'enterFullscreen' => __( 'Enter fullscreen', 'secure-video-player' ),
-						'exitFullscreen'  => __( 'Exit fullscreen', 'secure-video-player' ),
-						'qualityHD'       => __( 'HD (1080p)', 'secure-video-player' ),
-						'qualitySD'       => __( 'SD (720p)', 'secure-video-player' ),
-						'qualityLD'       => __( 'LD (480p)', 'secure-video-player' ),
-					),
-				)
-			);
+			$this->localize_player_script();
 		}
+	}
+
+	/**
+	 * Force localization of the script (called by shortcode when needed)
+	 */
+	public function force_localize_script(): void {
+		if ( wp_script_is( 'secure-video-player', 'enqueued' ) ) {
+			$this->localize_player_script();
+		}
+	}
+
+	/**
+	 * Localize the player script with consistent data
+	 */
+	private function localize_player_script(): void {
+		// Create a single nonce for the entire page request
+		static $nonce = null;
+		if ( null === $nonce ) {
+			$nonce = wp_create_nonce( 'svp_video_nonce' );
+		}
+
+		wp_localize_script(
+			'secure-video-player',
+			'svpAjax',
+			array(
+				'apiUrl'    => rest_url( 'secure-video/v1/token' ),
+				'nonce'     => $nonce,
+				'homeUrl'   => home_url(),
+				'strings'   => array(
+					'loading'         => __( 'Loading...', 'secure-video-player' ),
+					'error'           => __( 'Error loading video', 'secure-video-player' ),
+					'play'            => __( 'Play', 'secure-video-player' ),
+					'pause'           => __( 'Pause', 'secure-video-player' ),
+					'mute'            => __( 'Mute', 'secure-video-player' ),
+					'unmute'          => __( 'Unmute', 'secure-video-player' ),
+					'enterFullscreen' => __( 'Enter fullscreen', 'secure-video-player' ),
+					'exitFullscreen'  => __( 'Exit fullscreen', 'secure-video-player' ),
+					'qualityHD'       => __( 'HD (1080p)', 'secure-video-player' ),
+					'qualitySD'       => __( 'SD (720p)', 'secure-video-player' ),
+					'qualityLD'       => __( 'LD (480p)', 'secure-video-player' ),
+				),
+			)
+		);
 	}
 
 	/**
@@ -213,5 +240,18 @@ class Secure_Video_Player_Assets {
 		}
 		
 		return false;
+	}
+	
+	/**
+	 * AJAX handler for nonce refresh
+	 */
+	public function ajax_refresh_nonce(): void {
+		// Create a new nonce
+		$new_nonce = wp_create_nonce( 'svp_video_nonce' );
+		
+		wp_send_json_success( array(
+			'nonce' => $new_nonce,
+			'timestamp' => time()
+		) );
 	}
 }

@@ -116,7 +116,7 @@
 				this.qualities[this.currentQuality].label.split(' ')[0];
 		}
 		
-		async loadVideo() {
+		async loadVideo(retryCount = 0) {
 			if (this.isLoading) return;
 			
 			this.isLoading = true;
@@ -155,14 +155,29 @@
 				
 				if (!response.ok) {
 					let errorText = `HTTP ${response.status}: ${response.statusText}`;
+					let errorData = null;
+					
 					try {
-						const errorData = await response.json();
+						errorData = await response.json();
 						if (errorData.message) {
 							errorText += ` - ${errorData.message}`;
 						}
 					} catch (e) {
 						// If we can't parse the error as JSON, just use the status text
 					}
+					
+					// Handle nonce errors with retry mechanism
+					if (response.status === 403 && errorData && errorData.code === 'invalid_nonce' && retryCount === 0) {
+						console.log('SVP: Nonce error detected, attempting to refresh and retry...');
+						
+						// Try to refresh the nonce
+						const nonceRefreshed = await this.refreshNonce();
+						if (nonceRefreshed) {
+							// Retry the request with the new nonce
+							return this.loadVideo(1);
+						}
+					}
+					
 					throw new Error(errorText);
 				}
 				
@@ -182,6 +197,41 @@
 			} finally {
 				this.isLoading = false;
 				this.hideLoading();
+			}
+		}
+		
+		/**
+		 * Attempt to refresh the nonce by making a request to WordPress
+		 */
+		async refreshNonce() {
+			try {
+				console.log('SVP: Attempting to refresh nonce...');
+				
+				// Create a simple nonce refresh endpoint request
+				const refreshUrl = svpAjax.homeUrl + '/wp-admin/admin-ajax.php';
+				const formData = new FormData();
+				formData.append('action', 'svp_refresh_nonce');
+				
+				const response = await fetch(refreshUrl, {
+					method: 'POST',
+					body: formData,
+					credentials: 'same-origin'
+				});
+				
+				if (response.ok) {
+					const data = await response.json();
+					if (data.success && data.data && data.data.nonce) {
+						svpAjax.nonce = data.data.nonce;
+						console.log('SVP: Nonce refreshed successfully');
+						return true;
+					}
+				}
+				
+				console.log('SVP: Failed to refresh nonce');
+				return false;
+			} catch (error) {
+				console.error('SVP: Error refreshing nonce:', error);
+				return false;
 			}
 		}
 		
