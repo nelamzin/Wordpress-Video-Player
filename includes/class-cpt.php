@@ -26,6 +26,8 @@ class Secure_Video_Player_CPT {
 		add_action( 'add_meta_boxes', array( $this, 'add_meta_boxes' ) );
 		add_action( 'save_post', array( $this, 'save_meta_boxes' ) );
 		add_action( 'edit_form_after_title', array( $this, 'add_shortcode_display' ) );
+		add_filter( 'manage_video_player_posts_columns', array( $this, 'add_shortcode_column' ) );
+		add_action( 'manage_video_player_posts_custom_column', array( $this, 'show_shortcode_column' ), 10, 2 );
 	}
 
 	/**
@@ -229,10 +231,80 @@ class Secure_Video_Player_CPT {
 			</div>
 			<div class="inside">
 				<p><?php esc_html_e( 'Use this shortcode to embed the video:', 'secure-video-player' ); ?></p>
-				<input type="text" readonly value="[secure_video id=&quot;<?php echo esc_attr( $post->ID ); ?>&quot;]" class="regular-text" onclick="this.select();" />
-				<button type="button" class="button" onclick="navigator.clipboard.writeText('[secure_video id=&quot;<?php echo esc_js( $post->ID ); ?>&quot;]'); alert('<?php esc_js( __( 'Shortcode copied to clipboard!', 'secure-video-player' ) ); ?>');"><?php esc_html_e( 'Copy', 'secure-video-player' ); ?></button>
+				<div style="display: flex; gap: 10px; align-items: center;">
+					<input type="text" readonly value="[secure_video id=&quot;<?php echo esc_attr( $post->ID ); ?>&quot;]" class="regular-text" onclick="this.select();" style="flex: 1;" />
+					<button type="button" class="button" onclick="this.copyShortcode(<?php echo esc_js( $post->ID ); ?>);"><?php esc_html_e( 'Copy', 'secure-video-player' ); ?></button>
+				</div>
+				<p class="description"><?php esc_html_e( 'You can also add optional parameters like: [secure_video id="' . esc_attr( $post->ID ) . '" autoplay="true" class="my-class"]', 'secure-video-player' ); ?></p>
 			</div>
 		</div>
+		
+		<script type="text/javascript">
+		(function() {
+			window.copyShortcode = function(videoId) {
+				const shortcode = `[secure_video id="${videoId}"]`;
+				if (navigator.clipboard && window.isSecureContext) {
+					navigator.clipboard.writeText(shortcode).then(() => {
+						alert('<?php echo esc_js( __( 'Shortcode copied to clipboard!', 'secure-video-player' ) ); ?>');
+					}).catch(() => {
+						// Fallback for clipboard API failure
+						fallbackCopy(shortcode);
+					});
+				} else {
+					// Fallback for older browsers or non-HTTPS
+					fallbackCopy(shortcode);
+				}
+			};
+			
+			function fallbackCopy(text) {
+				const textArea = document.createElement('textarea');
+				textArea.value = text;
+				textArea.style.position = 'fixed';
+				textArea.style.opacity = '0';
+				document.body.appendChild(textArea);
+				textArea.focus();
+				textArea.select();
+				try {
+					document.execCommand('copy');
+					alert('<?php echo esc_js( __( 'Shortcode copied to clipboard!', 'secure-video-player' ) ); ?>');
+				} catch (err) {
+					alert('<?php echo esc_js( __( 'Failed to copy shortcode. Please copy manually.', 'secure-video-player' ) ); ?>');
+				}
+				document.body.removeChild(textArea);
+			}
+		})();
+		</script>
 		<?php
+	}
+
+	/**
+	 * Add shortcode column to posts list
+	 *
+	 * @param array $columns Existing columns.
+	 * @return array Modified columns.
+	 */
+	public function add_shortcode_column( array $columns ): array {
+		$new_columns = array();
+		foreach ( $columns as $key => $value ) {
+			$new_columns[ $key ] = $value;
+			if ( 'title' === $key ) {
+				$new_columns['shortcode'] = __( 'Shortcode', 'secure-video-player' );
+			}
+		}
+		return $new_columns;
+	}
+
+	/**
+	 * Show shortcode column content
+	 *
+	 * @param string $column  Column name.
+	 * @param int    $post_id Post ID.
+	 */
+	public function show_shortcode_column( string $column, int $post_id ): void {
+		if ( 'shortcode' === $column ) {
+			$shortcode = '[secure_video id="' . $post_id . '"]';
+			echo '<code>' . esc_html( $shortcode ) . '</code>';
+			echo '<br><button type="button" class="button button-small" onclick="copyToClipboard(\'' . esc_js( $shortcode ) . '\', this)" style="margin-top: 5px;">' . esc_html__( 'Copy', 'secure-video-player' ) . '</button>';
+		}
 	}
 }

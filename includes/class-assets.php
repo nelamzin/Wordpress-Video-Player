@@ -21,7 +21,6 @@ class Secure_Video_Player_Assets {
 	public function init(): void {
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_frontend_assets' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
-		add_action( 'wp_footer', array( $this, 'add_nonce_script' ) );
 	}
 
 	/**
@@ -51,7 +50,7 @@ class Secure_Video_Player_Assets {
 				'secure-video-player',
 				'svpAjax',
 				array(
-					'apiUrl'    => rest_url( 'secure-video/v1/token' ),
+					'apiUrl'    => esc_url_raw( rest_url( 'secure-video/v1/token' ) ),
 					'nonce'     => wp_create_nonce( 'svp_video_nonce' ),
 					'strings'   => array(
 						'loading'         => __( 'Loading...', 'secure-video-player' ),
@@ -79,28 +78,71 @@ class Secure_Video_Player_Assets {
 	public function enqueue_admin_assets( string $hook ): void {
 		// Only enqueue on video edit pages
 		global $post_type;
-		if ( 'video_player' === $post_type && ( 'post.php' === $hook || 'post-new.php' === $hook ) ) {
-			wp_enqueue_style(
-				'secure-video-player-admin',
-				SVP_PLUGIN_URL . 'assets/css/admin.css',
-				array(),
-				SVP_VERSION,
-				'all'
-			);
+		if ( 'video_player' === $post_type ) {
+			if ( 'post.php' === $hook || 'post-new.php' === $hook ) {
+				wp_enqueue_style(
+					'secure-video-player-admin',
+					SVP_PLUGIN_URL . 'assets/css/admin.css',
+					array(),
+					SVP_VERSION,
+					'all'
+				);
+			} elseif ( 'edit.php' === $hook ) {
+				// Add inline script for copying shortcodes in admin list
+				wp_add_inline_script( 'jquery', $this->get_admin_list_script() );
+			}
 		}
 	}
 
 	/**
-	 * Add nonce script to footer
+	 * Get admin list script for copying shortcodes
+	 *
+	 * @return string JavaScript code.
 	 */
-	public function add_nonce_script(): void {
-		if ( $this->has_video_players() ) {
-			?>
-			<script type="text/javascript">
-				window.svpNonce = '<?php echo esc_js( wp_create_nonce( 'svp_video_nonce' ) ); ?>';
-			</script>
-			<?php
+	private function get_admin_list_script(): string {
+		return "
+		function copyToClipboard(text, button) {
+			if (navigator.clipboard && window.isSecureContext) {
+				navigator.clipboard.writeText(text).then(() => {
+					showCopySuccess(button);
+				}).catch(() => {
+					fallbackCopy(text, button);
+				});
+			} else {
+				fallbackCopy(text, button);
+			}
 		}
+		
+		function fallbackCopy(text, button) {
+			const textArea = document.createElement('textarea');
+			textArea.value = text;
+			textArea.style.position = 'fixed';
+			textArea.style.opacity = '0';
+			document.body.appendChild(textArea);
+			textArea.focus();
+			textArea.select();
+			try {
+				document.execCommand('copy');
+				showCopySuccess(button);
+			} catch (err) {
+				button.textContent = '" . esc_js( __( 'Failed', 'secure-video-player' ) ) . "';
+				setTimeout(() => { button.textContent = '" . esc_js( __( 'Copy', 'secure-video-player' ) ) . "'; }, 2000);
+			}
+			document.body.removeChild(textArea);
+		}
+		
+		function showCopySuccess(button) {
+			const originalText = button.textContent;
+			button.textContent = '" . esc_js( __( 'Copied!', 'secure-video-player' ) ) . "';
+			button.style.backgroundColor = '#46b450';
+			button.style.color = '#fff';
+			setTimeout(() => {
+				button.textContent = originalText;
+				button.style.backgroundColor = '';
+				button.style.color = '';
+			}, 2000);
+		}
+		";
 	}
 
 	/**
@@ -110,6 +152,14 @@ class Secure_Video_Player_Assets {
 	 */
 	private function has_video_players(): bool {
 		global $post;
+
+		// Always load on video player admin pages
+		if ( is_admin() && function_exists( 'get_current_screen' ) ) {
+			$screen = get_current_screen();
+			if ( $screen && 'video_player' === $screen->post_type ) {
+				return true;
+			}
+		}
 
 		if ( ! $post ) {
 			return false;
@@ -123,13 +173,44 @@ class Secure_Video_Player_Assets {
 		// Check if post content contains Gutenberg video blocks
 		if ( has_blocks( $post->post_content ) ) {
 			$blocks = parse_blocks( $post->post_content );
-			foreach ( $blocks as $block ) {
-				if ( 'secure-video-player/video' === $block['blockName'] ) {
-					return true;
-				}
+			if ( $this->has_video_blocks( $blocks ) ) {
+				return true;
 			}
 		}
 
+		// Check if this is a video player post type
+		if ( 'video_player' === get_post_type( $post ) ) {
+			return true;
+		}
+
+		// Check for widgets or other content areas that might contain shortcodes
+		if ( is_active_sidebar( 'sidebar-1' ) || is_active_sidebar( 'footer-1' ) ) {
+			// For performance, we'll assume any active widgets might contain video shortcodes
+			// This is a safe assumption for ensuring assets are loaded when needed
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Recursively check for video blocks in parsed blocks
+	 *
+	 * @param array $blocks Array of parsed blocks.
+	 * @return bool Whether video blocks are found.
+	 */
+	private function has_video_blocks( array $blocks ): bool {
+		foreach ( $blocks as $block ) {
+			if ( 'secure-video-player/video' === $block['blockName'] ) {
+				return true;
+			}
+			
+			// Check inner blocks recursively
+			if ( ! empty( $block['innerBlocks'] ) && $this->has_video_blocks( $block['innerBlocks'] ) ) {
+				return true;
+			}
+		}
+		
 		return false;
 	}
 }

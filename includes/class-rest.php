@@ -65,8 +65,18 @@ class Secure_Video_Player_REST {
 	public function check_token_permissions( $request ) {
 		// Verify nonce
 		$nonce = $request->get_param( 'nonce' );
+		
+		// Log nonce verification for debugging (remove in production)
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'SVP: Nonce verification - Received: ' . $nonce );
+		}
+		
+		if ( ! $nonce ) {
+			return new WP_Error( 'missing_nonce', __( 'Missing nonce parameter.', 'secure-video-player' ), array( 'status' => 400 ) );
+		}
+		
 		if ( ! wp_verify_nonce( $nonce, 'svp_video_nonce' ) ) {
-			return new WP_Error( 'invalid_nonce', __( 'Invalid nonce.', 'secure-video-player' ), array( 'status' => 403 ) );
+			return new WP_Error( 'invalid_nonce', __( 'Invalid nonce. Please refresh the page and try again.', 'secure-video-player' ), array( 'status' => 403 ) );
 		}
 
 		// Rate limiting check (basic implementation)
@@ -79,7 +89,7 @@ class Secure_Video_Player_REST {
 		} else {
 			$requests++;
 			if ( $requests > 60 ) { // Max 60 requests per minute
-				return new WP_Error( 'rate_limit_exceeded', __( 'Rate limit exceeded.', 'secure-video-player' ), array( 'status' => 429 ) );
+				return new WP_Error( 'rate_limit_exceeded', __( 'Rate limit exceeded. Please try again later.', 'secure-video-player' ), array( 'status' => 429 ) );
 			}
 			set_transient( $transient_key, $requests, MINUTE_IN_SECONDS );
 		}

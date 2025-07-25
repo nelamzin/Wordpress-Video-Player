@@ -123,18 +123,42 @@
 			this.showLoading();
 			
 			try {
-				const response = await fetch(`${svpAjax.apiUrl}?post=${this.videoId}&quality=${this.currentQuality}&nonce=${svpAjax.nonce}`);
+				// Validate required data
+				if (!svpAjax) {
+					throw new Error('svpAjax not loaded');
+				}
+				
+				if (!svpAjax.apiUrl || !svpAjax.nonce) {
+					throw new Error('Missing API configuration');
+				}
+				
+				// Construct URL with proper query parameters
+				const url = new URL(svpAjax.apiUrl);
+				url.searchParams.set('post', this.videoId);
+				url.searchParams.set('quality', this.currentQuality);
+				url.searchParams.set('nonce', svpAjax.nonce);
+				
+				console.log('SVP: Loading video with URL:', url.toString());
+				
+				const response = await fetch(url.toString());
+				
+				if (!response.ok) {
+					throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+				}
+				
 				const data = await response.json();
+				console.log('SVP: API response:', data);
 				
 				if (data.success) {
 					this.video.src = data.url;
 					await this.video.load();
+					console.log('SVP: Video loaded successfully');
 				} else {
 					throw new Error(data.message || 'Failed to load video');
 				}
 			} catch (error) {
-				console.error('Error loading video:', error);
-				this.showError();
+				console.error('SVP: Error loading video:', error);
+				this.showError(error.message);
 			} finally {
 				this.isLoading = false;
 				this.hideLoading();
@@ -531,9 +555,17 @@
 			this.loadingContainer.classList.add('svp-hidden');
 		}
 		
-		showError() {
+		showError(message) {
 			this.hideLoading();
 			this.errorMessage.style.display = 'block';
+			
+			// Update error message if custom message provided
+			if (message) {
+				const errorText = this.errorMessage.querySelector('p');
+				if (errorText) {
+					errorText.textContent = `Error loading video: ${message}`;
+				}
+			}
 		}
 	}
 	
