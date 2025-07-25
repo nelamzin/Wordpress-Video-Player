@@ -105,31 +105,9 @@ class Secure_Video_Player_Shortcode {
 			wp_enqueue_style( 'secure-video-player' );
 			wp_enqueue_script( 'secure-video-player' );
 			
-			// Manually localize script if not already done
-			if ( ! wp_script_is( 'secure-video-player', 'done' ) ) {
-				wp_localize_script(
-					'secure-video-player',
-					'svpAjax',
-					array(
-						'apiUrl'    => rest_url( 'secure-video/v1/token' ),
-						'nonce'     => wp_create_nonce( 'svp_video_nonce' ),
-						'homeUrl'   => home_url(),
-						'strings'   => array(
-							'loading'         => __( 'Loading...', 'secure-video-player' ),
-							'error'           => __( 'Error loading video', 'secure-video-player' ),
-							'play'            => __( 'Play', 'secure-video-player' ),
-							'pause'           => __( 'Pause', 'secure-video-player' ),
-							'mute'            => __( 'Mute', 'secure-video-player' ),
-							'unmute'          => __( 'Unmute', 'secure-video-player' ),
-							'enterFullscreen' => __( 'Enter fullscreen', 'secure-video-player' ),
-							'exitFullscreen'  => __( 'Exit fullscreen', 'secure-video-player' ),
-							'qualityHD'       => __( 'HD (1080p)', 'secure-video-player' ),
-							'qualitySD'       => __( 'SD (720p)', 'secure-video-player' ),
-							'qualityLD'       => __( 'LD (480p)', 'secure-video-player' ),
-						),
-					)
-				);
-			}
+			// Force asset localization to ensure consistent nonce
+			// This will be handled by the assets class to maintain consistency
+			do_action( 'svp_force_asset_localization' );
 		}
 
 		return $output;

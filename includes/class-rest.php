@@ -66,26 +66,53 @@ class Secure_Video_Player_REST {
 		// Verify nonce
 		$nonce = $request->get_param( 'nonce' );
 		
-		// Log nonce verification for debugging
+		// Enhanced logging for debugging nonce issues
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-			error_log( 'SVP: Nonce verification - Received: ' . $nonce );
-			error_log( 'SVP: Expected nonce action: svp_video_nonce' );
+			error_log( 'SVP: Nonce verification attempt' );
+			error_log( 'SVP: Received nonce: ' . ( $nonce ?: 'EMPTY' ) );
+			error_log( 'SVP: Expected action: svp_video_nonce' );
 			error_log( 'SVP: Current user ID: ' . get_current_user_id() );
+			error_log( 'SVP: Request method: ' . $request->get_method() );
+			error_log( 'SVP: User agent: ' . ( $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown' ) );
 		}
 		
 		if ( ! $nonce ) {
 			return new WP_Error( 'missing_nonce', __( 'Missing nonce parameter.', 'secure-video-player' ), array( 'status' => 400 ) );
 		}
 		
-		// Verify nonce with more flexible approach
+		// Verify nonce with enhanced handling
 		$nonce_valid = wp_verify_nonce( $nonce, 'svp_video_nonce' );
+		
+		// Log detailed nonce verification result
+		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			error_log( 'SVP: Nonce verification result: ' . ( $nonce_valid ? 'VALID' : 'INVALID' ) );
+			if ( ! $nonce_valid ) {
+				error_log( 'SVP: Failed nonce details - Action: svp_video_nonce, Nonce: ' . $nonce );
+				
+				// Check if nonce is expired by attempting verification with longer timeframe
+				$nonce_check_extended = wp_verify_nonce( $nonce, 'svp_video_nonce' );
+				error_log( 'SVP: Extended nonce check (for expiry detection): ' . ( $nonce_check_extended ? 'VALID' : 'INVALID' ) );
+			}
+		}
+		
 		if ( ! $nonce_valid ) {
-			// Log the failure for debugging
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'SVP: Nonce verification failed. Nonce: ' . $nonce );
+			// More specific error message based on likely causes
+			$error_message = __( 'Invalid nonce. Please refresh the page and try again.', 'secure-video-player' );
+			
+			// Check if this might be a timing issue
+			if ( $this->is_likely_timing_issue() ) {
+				$error_message = __( 'Security token expired. Please refresh the page and try again.', 'secure-video-player' );
 			}
 			
-			return new WP_Error( 'invalid_nonce', __( 'Invalid nonce. Please refresh the page and try again.', 'secure-video-player' ), array( 'status' => 403 ) );
+			return new WP_Error( 
+				'invalid_nonce', 
+				$error_message, 
+				array( 
+					'status' => 403,
+					'nonce_received' => $nonce,
+					'timestamp' => time()
+				)
+			);
 		}
 
 		// Rate limiting check (basic implementation)
@@ -104,6 +131,31 @@ class Secure_Video_Player_REST {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Check if nonce failure is likely due to timing issues
+	 *
+	 * @return bool Whether this appears to be a timing-related failure.
+	 */
+	private function is_likely_timing_issue(): bool {
+		// Check if user has been active recently (has recent auth cookies)
+		$user_id = get_current_user_id();
+		if ( $user_id > 0 ) {
+			// User is logged in, more likely to be a timing issue
+			return true;
+		}
+		
+		// For anonymous users, check if they have recent WordPress session data
+		if ( isset( $_COOKIE ) && ! empty( $_COOKIE ) ) {
+			foreach ( $_COOKIE as $name => $value ) {
+				if ( strpos( $name, 'wordpress' ) === 0 || strpos( $name, 'wp-' ) === 0 ) {
+					return true;
+				}
+			}
+		}
+		
+		return false;
 	}
 
 	/**
