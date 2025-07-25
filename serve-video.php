@@ -52,16 +52,24 @@ class Secure_Video_Server {
 			self::send_error( 'Request verification failed', 403 );
 		}
 
-		// Get video file path
+		// Get video file path or URL
 		$video_url = $token_data['url'];
 		$video_path = self::url_to_path( $video_url );
 
-		if ( ! $video_path || ! file_exists( $video_path ) ) {
-			self::send_error( 'Video file not found', 404 );
+		if ( ! $video_path ) {
+			self::send_error( 'Video not found', 404 );
 		}
 
-		// Stream the video
-		self::stream_video( $video_path );
+		// Check if it's a local file or external URL
+		if ( file_exists( $video_path ) ) {
+			// Stream local file
+			self::stream_video( $video_path );
+		} elseif ( filter_var( $video_path, FILTER_VALIDATE_URL ) ) {
+			// Proxy external URL
+			self::proxy_external_video( $video_path );
+		} else {
+			self::send_error( 'Video file not found', 404 );
+		}
 	}
 
 	/**
@@ -120,10 +128,10 @@ class Secure_Video_Server {
 	}
 
 	/**
-	 * Convert URL to file path
+	 * Convert URL to file path or handle external URLs
 	 *
 	 * @param string $url The URL.
-	 * @return string|false The file path or false if not local.
+	 * @return string|false The file path or the external URL for proxying.
 	 */
 	private static function url_to_path( string $url ) {
 		$upload_dir = wp_upload_dir();
@@ -133,8 +141,12 @@ class Secure_Video_Server {
 			return str_replace( $upload_url, $upload_dir['basedir'], $url );
 		}
 
-		// For external URLs, we can't serve directly
-		// In a production environment, you might want to proxy these
+		// For external URLs, return the URL itself for proxying
+		// Check if it's a valid external URL
+		if ( filter_var( $url, FILTER_VALIDATE_URL ) && ( strpos( $url, 'http://' ) === 0 || strpos( $url, 'https://' ) === 0 ) ) {
+			return $url;
+		}
+
 		return false;
 	}
 
@@ -224,6 +236,120 @@ class Secure_Video_Server {
 			}
 			fclose( $handle );
 		}
+	}
+
+	/**
+	 * Proxy external video URL
+	 *
+	 * @param string $external_url The external video URL.
+	 */
+	private static function proxy_external_video( string $external_url ): void {
+		// Security: Validate the external URL is from allowed domains
+		$allowed_domains = apply_filters( 'svp_allowed_external_domains', array(
+			'storage.yandexcloud.net',
+			// Add other trusted domains here
+		) );
+
+		$parsed_url = parse_url( $external_url );
+		if ( ! $parsed_url || ! isset( $parsed_url['host'] ) ) {
+			self::send_error( 'Invalid external URL', 400 );
+		}
+
+		$is_allowed = false;
+		foreach ( $allowed_domains as $domain ) {
+			if ( $parsed_url['host'] === $domain || 
+				 ( function_exists( 'str_ends_with' ) && str_ends_with( $parsed_url['host'], '.' . $domain ) ) ||
+				 ( ! function_exists( 'str_ends_with' ) && substr( $parsed_url['host'], -strlen( '.' . $domain ) ) === '.' . $domain ) ) {
+				$is_allowed = true;
+				break;
+			}
+		}
+
+		if ( ! $is_allowed ) {
+			self::send_error( 'External domain not allowed', 403 );
+		}
+
+		// Handle range requests for external videos
+		$headers = array();
+		if ( isset( $_SERVER['HTTP_RANGE'] ) ) {
+			$headers['Range'] = $_SERVER['HTTP_RANGE'];
+		}
+
+		// Add security headers
+		$headers['User-Agent'] = 'WordPress Secure Video Player/' . ( defined( 'SVP_VERSION' ) ? SVP_VERSION : '1.0.0' );
+		$headers['Referer'] = home_url();
+
+		// Create context for the request
+		$context = stream_context_create( array(
+			'http' => array(
+				'method' => 'GET',
+				'header' => self::build_header_string( $headers ),
+				'timeout' => 30,
+				'follow_location' => true,
+				'max_redirects' => 3,
+			),
+		) );
+
+		// Open the external stream
+		$external_stream = fopen( $external_url, 'rb', false, $context );
+		if ( ! $external_stream ) {
+			self::send_error( 'Failed to open external video stream', 502 );
+		}
+
+		// Get response headers from the external stream
+		$response_headers = stream_get_meta_data( $external_stream );
+		
+		// Set appropriate headers based on the external response
+		if ( isset( $response_headers['wrapper_data'] ) ) {
+			foreach ( $response_headers['wrapper_data'] as $header ) {
+				if ( stripos( $header, 'content-type:' ) === 0 ) {
+					header( $header );
+				} elseif ( stripos( $header, 'content-length:' ) === 0 ) {
+					header( $header );
+				} elseif ( stripos( $header, 'content-range:' ) === 0 ) {
+					header( $header );
+				} elseif ( stripos( $header, 'accept-ranges:' ) === 0 ) {
+					header( $header );
+				} elseif ( stripos( $header, 'HTTP/' ) === 0 ) {
+					// Handle HTTP status line
+					if ( strpos( $header, '206 Partial Content' ) !== false ) {
+						header( 'HTTP/1.1 206 Partial Content' );
+					} elseif ( strpos( $header, '416 Range Not Satisfiable' ) !== false ) {
+						header( 'HTTP/1.1 416 Range Not Satisfiable' );
+						fclose( $external_stream );
+						exit;
+					}
+				}
+			}
+		}
+
+		// Set security headers
+		header( 'X-Robots-Tag: noindex, nofollow' );
+		header( 'X-Content-Type-Options: nosniff' );
+		header( 'Cache-Control: private, max-age=3600' );
+
+		// Stream the external content
+		while ( ! feof( $external_stream ) ) {
+			echo fread( $external_stream, 8192 );
+			flush();
+		}
+		
+		fclose( $external_stream );
+		exit;
+	}
+
+	/**
+	 * Build header string from array
+	 *
+	 * @param array $headers Array of headers.
+	 * @return string Header string.
+	 */
+	private static function build_header_string( array $headers ): string {
+		$header_string = '';
+		foreach ( $headers as $key => $value ) {
+			$header_string .= $key . ': ' . $value . "\r\n";
+		}
+		return $header_string;
 	}
 
 	/**

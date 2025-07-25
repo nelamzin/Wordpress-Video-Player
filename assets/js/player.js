@@ -133,17 +133,37 @@
 				}
 				
 				// Construct URL with proper query parameters
-				const url = new URL(svpAjax.apiUrl);
+				// Handle potential HTML entity encoding in the API URL
+				const baseUrl = svpAjax.apiUrl.replace(/&amp;/g, '&');
+				const url = new URL(baseUrl);
 				url.searchParams.set('post', this.videoId);
 				url.searchParams.set('quality', this.currentQuality);
 				url.searchParams.set('nonce', svpAjax.nonce);
 				
 				console.log('SVP: Loading video with URL:', url.toString());
 				
-				const response = await fetch(url.toString());
+				const response = await fetch(url.toString(), {
+					method: 'GET',
+					headers: {
+						'X-Requested-With': 'XMLHttpRequest',
+					},
+					credentials: 'same-origin'
+				});
+				
+				console.log('SVP: Response status:', response.status);
+				console.log('SVP: Response headers:', response.headers);
 				
 				if (!response.ok) {
-					throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+					let errorText = `HTTP ${response.status}: ${response.statusText}`;
+					try {
+						const errorData = await response.json();
+						if (errorData.message) {
+							errorText += ` - ${errorData.message}`;
+						}
+					} catch (e) {
+						// If we can't parse the error as JSON, just use the status text
+					}
+					throw new Error(errorText);
 				}
 				
 				const data = await response.json();
