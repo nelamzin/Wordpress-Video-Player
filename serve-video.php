@@ -6,15 +6,48 @@
  */
 
 // Load WordPress
-$wp_load_path = dirname( __FILE__ ) . '/../../../wp-load.php';
-if ( ! file_exists( $wp_load_path ) ) {
-	// Try alternative path
-	$wp_load_path = dirname( __FILE__ ) . '/../../../../wp-load.php';
+$wp_load_paths = array(
+	dirname( __FILE__ ) . '/../../../wp-load.php',    // Standard plugin directory
+	dirname( __FILE__ ) . '/../../../../wp-load.php', // Alternative deep directory
+	dirname( __FILE__ ) . '/../../wp-load.php',       // Shallow directory
+	ABSPATH . 'wp-load.php',                          // If ABSPATH is defined
+);
+
+$wp_loaded = false;
+foreach ( $wp_load_paths as $wp_load_path ) {
+	if ( file_exists( $wp_load_path ) ) {
+		require_once $wp_load_path;
+		$wp_loaded = true;
+		break;
+	}
 }
 
-if ( file_exists( $wp_load_path ) ) {
-	require_once $wp_load_path;
-} else {
+if ( ! $wp_loaded ) {
+	// Try to find wp-load.php by traversing up the directory tree
+	$current_dir = dirname( __FILE__ );
+	$max_depth = 10; // Prevent infinite loops
+	$depth = 0;
+	
+	while ( $depth < $max_depth ) {
+		$wp_load_path = $current_dir . '/wp-load.php';
+		if ( file_exists( $wp_load_path ) ) {
+			require_once $wp_load_path;
+			$wp_loaded = true;
+			break;
+		}
+		
+		$parent_dir = dirname( $current_dir );
+		if ( $parent_dir === $current_dir ) {
+			// Reached filesystem root
+			break;
+		}
+		
+		$current_dir = $parent_dir;
+		$depth++;
+	}
+}
+
+if ( ! $wp_loaded ) {
 	http_response_code( 500 );
 	exit( 'WordPress not found' );
 }
