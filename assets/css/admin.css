@@ -1,0 +1,80 @@
+/*
+ * Admin Styles for Secure Video Player
+ * 
+ * @package SecureVideoPlayer
+ */
+
+/* Meta box styling */
+.svp-video-urls .form-table th {
+	width: 150px;
+}
+
+.svp-video-urls .form-table input[type="url"] {
+	width: 100%;
+	max-width: 500px;
+}
+
+.svp-video-urls .description {
+	font-style: italic;
+	color: #666;
+}
+
+/* Shortcode display box */
+.postbox .svp-shortcode-display {
+	padding: 12px;
+	background: #f9f9f9;
+	border: 1px solid #ddd;
+	border-radius: 4px;
+}
+
+.svp-shortcode-display input[type="text"] {
+	width: 300px;
+	margin-right: 8px;
+}
+
+/* Block preview styling */
+.secure-video-player-block-preview {
+	border: 2px dashed #ddd !important;
+	border-radius: 8px !important;
+	padding: 20px !important;
+	text-align: center !important;
+	background-color: #f9f9f9 !important;
+}
+
+.secure-video-player-block-preview h3 {
+	margin: 0 0 10px 0 !important;
+	font-size: 18px !important;
+	color: #333 !important;
+}
+
+/* Video list table */
+.wp-list-table .column-video_urls {
+	width: 200px;
+}
+
+.svp-url-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.svp-url-list li {
+	margin: 2px 0;
+	font-size: 12px;
+}
+
+.svp-url-status {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	margin-right: 5px;
+}
+
+.svp-url-status.available {
+	background: #46b450;
+}
+
+.svp-url-status.missing {
+	background: #dc3232;
+}
