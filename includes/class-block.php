@@ -19,7 +19,8 @@ class Secure_Video_Player_Block {
 	 * Initialize the block
 	 */
 	public function init(): void {
-		add_action( 'init', array( $this, 'register_block' ) );
+		// Register the block directly since we're already in the init hook
+		$this->register_block();
 		add_action( 'enqueue_block_editor_assets', array( $this, 'enqueue_block_assets' ) );
 	}
 

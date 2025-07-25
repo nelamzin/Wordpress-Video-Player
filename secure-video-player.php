@@ -52,6 +52,9 @@ function secure_video_player_activate() {
 		update_option( 'svp_secret_salt', wp_generate_password( 64, true, true ) );
 	}
 	
+	// Initialize the plugin to register CPT before flushing rules
+	secure_video_player_init();
+	
 	// Flush rewrite rules to ensure custom post type URLs work
 	flush_rewrite_rules();
 }
